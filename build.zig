@@ -54,7 +54,7 @@ pub fn build(b: *std.Build) void {
     // but does not run it.
 
     const exe_unit_tests = b.addTest(.{
-        .root_source_file = b.path("src/main.zig"),
+        .root_source_file = b.path("src/test.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -68,6 +68,6 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_exe_unit_tests.step);
 
     const foo_step = b.step("all", "Run tests, then app");
-    foo_step.dependOn(run_step);
     foo_step.dependOn(test_step);
+    foo_step.dependOn(run_step);
 }
