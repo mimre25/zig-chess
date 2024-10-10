@@ -3,6 +3,7 @@ const pieces = @import("pieces.zig");
 
 const TPiece = pieces.TPiece;
 const Piece = pieces.Piece;
+var Empty = pieces.Empty;
 
 pub const A = 0;
 pub const B = 1;
@@ -13,15 +14,24 @@ pub const F = 5;
 pub const G = 6;
 pub const H = 7;
 
+pub const Position = struct {
+    rank: u4,
+    file: u4,
+
+    pub fn eq(self: Position, other: Position) bool {
+        return self.rank == other.rank and self.file == other.file;
+    }
+};
+
 pub const Rank = struct {
-    files: []TPiece,
+    files: []*Piece,
     num: u4,
 
     pub fn new(rankNumber: u4, allocator: std.mem.Allocator) !Rank {
-        const rank = Rank{ .files = try allocator.alloc(TPiece, 8), .num = rankNumber };
-        std.mem.copyForwards(TPiece, rank.files, &[_]TPiece{
-            ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
-        });
+        const rank = Rank{ .files = try allocator.alloc(*Piece, 8), .num = rankNumber };
+        std.mem.copyForwards(*Piece, rank.files, &[_]*Piece{
+            &Empty,
+        } ** 8);
         return rank;
     }
 
@@ -30,11 +40,11 @@ pub const Rank = struct {
     }
 
     pub fn evictField(self: Rank, file: u4) void {
-        self.files[file] = ' ';
+        self.files[file] = &Empty;
     }
 
-    pub fn putPiece(self: Rank, piece: Piece) void {
-        self.files[piece.file()] = piece.icon();
+    pub fn putPiece(self: Rank, piece: *Piece) void {
+        self.files[piece.file()] = piece;
     }
 
     pub fn print(self: Rank, writer: anytype) !void {
@@ -48,11 +58,15 @@ pub const Rank = struct {
                 try writer.print("\u{001b}[40m", .{});
             }
 
-            try writer.print("{u}", .{c});
+            try writer.print("{u}", .{c.icon()});
             try writer.print(" ", .{});
             try writer.print("\u{001b}[0m", .{});
         }
         try writer.print("\n", .{});
+    }
+
+    pub fn isEmpty(self: Rank, file: u4) bool {
+        return self.files[file] == &Empty;
     }
 };
 
@@ -81,11 +95,23 @@ pub const Board = struct {
     }
 
     pub fn evictField(self: Board, file: u4, rank: u4) void {
-        self.ranks[rank].evictField(file, rank);
+        self.ranks[rank].evictField(file);
     }
 
-    pub fn putPiece(self: Board, piece: Piece) void {
+    pub fn putPiece(self: Board, piece: *Piece) void {
+        const currentPiece = self.getPiece(piece.file(), piece.rank());
+        switch (currentPiece.*) {
+            .empty => {},
+            inline else => |*case| {
+                case.file = std.math.maxInt(u4);
+                case.rank = std.math.maxInt(u4);
+            },
+        }
         self.ranks[piece.rank()].putPiece(piece);
+    }
+
+    pub fn getPiece(self: Board, file: u4, rank: u4) *Piece {
+        return self.ranks[rank].files[file];
     }
 
     pub fn print(self: Board, writer: anytype) !void {
@@ -96,5 +122,9 @@ pub const Board = struct {
             try self.ranks[i].print(writer);
         }
         try writer.print("  A B C D E F G H\n", .{});
+    }
+
+    pub fn isEmpty(self: Board, file: u4, rank: u4) bool {
+        return self.ranks[rank].isEmpty(file);
     }
 };

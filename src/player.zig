@@ -1,5 +1,6 @@
 const pieces = @import("pieces.zig");
 const board = @import("board.zig");
+const Position = board.Position;
 
 pub const Color = enum { black, white };
 const A = board.A;
@@ -29,6 +30,8 @@ pub const Player = struct {
     queen: pieces.Piece,
     king: pieces.Piece,
     pieces: [16]*pieces.Piece = undefined,
+    castlingPossible: bool = true,
+    color: Color,
 
     pub fn new(color: Color) Player {
         const player = Player{
@@ -48,6 +51,7 @@ pub const Player = struct {
             .bishop2 = pieces.Bishop.new(color, F),
             .queen = pieces.Queen.new(color),
             .king = pieces.King.new(color),
+            .color = color,
         };
         return player;
     }
@@ -69,5 +73,14 @@ pub const Player = struct {
         self.pieces[13] = &self.bishop2;
         self.pieces[14] = &self.queen;
         self.pieces[15] = &self.king;
+    }
+
+    pub fn findPiece(self: Player, pos: *const Position) *pieces.Piece {
+        for (self.pieces) |piece| {
+            if (pos.eq(piece.pos())) {
+                return piece;
+            }
+        }
+        unreachable;
     }
 };
