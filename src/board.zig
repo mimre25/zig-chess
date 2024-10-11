@@ -1,9 +1,10 @@
 const std = @import("std");
-const pieces = @import("pieces.zig");
+const MPieces = @import("pieces.zig");
+const MPlayer = @import("player.zig");
 
-const TPiece = pieces.TPiece;
-const Piece = pieces.Piece;
-var Empty = pieces.Empty;
+const TPiece = MPieces.TPiece;
+const Piece = MPieces.Piece;
+var EmptySquare = &MPieces.__Empty;
 
 pub const A = 0;
 pub const B = 1;
@@ -30,7 +31,7 @@ pub const Rank = struct {
     pub fn new(rankNumber: u4, allocator: std.mem.Allocator) !Rank {
         const rank = Rank{ .files = try allocator.alloc(*Piece, 8), .num = rankNumber };
         std.mem.copyForwards(*Piece, rank.files, &[_]*Piece{
-            &Empty,
+            EmptySquare,
         } ** 8);
         return rank;
     }
@@ -40,11 +41,11 @@ pub const Rank = struct {
     }
 
     pub fn evictField(self: Rank, file: u4) void {
-        self.files[file] = &Empty;
+        self.files[file] = EmptySquare;
     }
 
-    pub fn putPiece(self: Rank, piece: *Piece) void {
-        self.files[piece.file()] = piece;
+    pub fn putPiece(self: *Rank, piece: *Piece) void {
+        self.files[piece.file] = piece;
     }
 
     pub fn print(self: Rank, writer: anytype) !void {
@@ -58,7 +59,7 @@ pub const Rank = struct {
                 try writer.print("\u{001b}[40m", .{});
             }
 
-            try writer.print("{u}", .{c.icon()});
+            try writer.print("{u}", .{@intFromEnum(c.icon)});
             try writer.print(" ", .{});
             try writer.print("\u{001b}[0m", .{});
         }
@@ -66,18 +67,22 @@ pub const Rank = struct {
     }
 
     pub fn isEmpty(self: Rank, file: u4) bool {
-        return self.files[file] == &Empty;
+        return self.files[file] == EmptySquare;
     }
 };
 
 pub const Board = struct {
     ranks: []Rank,
     allocator: std.mem.Allocator,
+    white: *MPlayer.Player,
+    black: *MPlayer.Player,
 
-    pub fn new(allocator: std.mem.Allocator) !Board {
+    pub fn new(allocator: std.mem.Allocator, white: *MPlayer.Player, black: *MPlayer.Player) !Board {
         var board = Board{
             .ranks = try allocator.alloc(Rank, 9),
             .allocator = allocator,
+            .white = white,
+            .black = black,
         };
         // hack ~ using 9 ranks so that we can denote ranks 1-indexed without
         // useing @"1" as variable name
@@ -87,7 +92,7 @@ pub const Board = struct {
         return board;
     }
 
-    pub fn destory(self: Board) void {
+    pub fn destroy(self: Board) void {
         for (self.ranks) |row| {
             row.destroy(self.allocator);
         }
@@ -99,18 +104,19 @@ pub const Board = struct {
     }
 
     pub fn putPiece(self: Board, piece: *Piece) void {
-        const currentPiece = self.getPiece(piece.file(), piece.rank());
-        switch (currentPiece.*) {
-            .empty => {},
-            inline else => |*case| {
-                case.file = std.math.maxInt(u4);
-                case.rank = std.math.maxInt(u4);
-            },
+        const currentPiece = self.getSquare(piece.file, piece.rank);
+        if (currentPiece != EmptySquare) {
+            const owner = switch (currentPiece.color) {
+                MPlayer.Color.white => self.white,
+                MPlayer.Color.black => self.black,
+            };
+            owner.takePiece(currentPiece);
         }
-        self.ranks[piece.rank()].putPiece(piece);
+
+        self.ranks[piece.rank].putPiece(piece);
     }
 
-    pub fn getPiece(self: Board, file: u4, rank: u4) *Piece {
+    pub fn getSquare(self: Board, file: u4, rank: u4) *Piece {
         return self.ranks[rank].files[file];
     }
 

@@ -1,21 +1,21 @@
 const std = @import("std");
-const boardModule = @import("board.zig");
-const pieceModule = @import("pieces.zig");
-const playerModule = @import("player.zig");
-const Player = playerModule.Player;
-const Board = boardModule.Board;
+const MBoard = @import("board.zig");
+const MPieces = @import("pieces.zig");
+const MPlayer = @import("player.zig");
+const Player = MPlayer.Player;
+const Board = MBoard.Board;
 const expect = std.testing.expect;
-const Color = playerModule.Color;
-const Position = boardModule.Position;
+const Color = MPlayer.Color;
+const Position = MBoard.Position;
 
-const A = boardModule.A;
-const B = boardModule.B;
-const C = boardModule.C;
-const D = boardModule.D;
-const E = boardModule.E;
-const F = boardModule.F;
-const G = boardModule.G;
-const H = boardModule.H;
+const A = MBoard.A;
+const B = MBoard.B;
+const C = MBoard.C;
+const D = MBoard.D;
+const E = MBoard.E;
+const F = MBoard.F;
+const G = MBoard.G;
+const H = MBoard.H;
 
 fn absDiff(a: u4, b: u4) i5 {
     return @intCast(@abs(a - @as(i5, b)));
@@ -36,10 +36,10 @@ pub const Move = union(MoveType) {
 pub const PieceMove = struct {
     rank: u4,
     file: u4,
-    piece: u8,
+    piece: MPieces.PieceID,
     sourceRank: ?u4 = null,
     sourceFile: ?u4 = null,
-    promoteTo: ?u8 = null,
+    promoteTo: ?MPieces.PieceID = null,
 
     pub fn pos(self: PieceMove) Position {
         return Position{ .file = self.file, .rank = self.rank };
@@ -57,7 +57,7 @@ pub const PieceMove = struct {
         if (srcFile != ' ') {
             srcFile += 'a';
         }
-        return writer.print("{u} from {u}{any} to {u}{any}", .{ self.piece, srcFile, self.sourceRank, self.file + a, self.rank });
+        return writer.print("{u} from {u}{any} to {u}{any}", .{ @intFromEnum(self.piece), srcFile, self.sourceRank, self.file + a, self.rank });
     }
 };
 
@@ -118,7 +118,7 @@ fn parse_piece_move(input: []const u8) ParseError!Move {
     const piece = try parse_piece(input[0]);
     var startIdx: u4 = 0;
     var sourceFile: ?u4 = null;
-    var promoteTo: ?u8 = null;
+    var promoteTo: ?MPieces.PieceID = null;
     if (piece == 'P') {
         // "dxc6"
         if (input[1] == 'x') {
@@ -126,7 +126,7 @@ fn parse_piece_move(input: []const u8) ParseError!Move {
             startIdx = 2;
         }
         if (input[input.len - 2] == '=') {
-            promoteTo = input[input.len - 1];
+            promoteTo = @enumFromInt(input[input.len - 1]);
         }
     } else {
         startIdx = 1;
@@ -146,7 +146,7 @@ fn parse_piece_move(input: []const u8) ParseError!Move {
     return Move{ .pieceMove = PieceMove{
         .rank = rank,
         .file = file,
-        .piece = piece,
+        .piece = @enumFromInt(piece),
         .sourceFile = sourceFile,
         .promoteTo = promoteTo,
     } };
@@ -188,54 +188,60 @@ test "parse algebraic notation" {
 }
 
 fn isCastlingPossible(player: *const Player, board: *const Board) bool {
-    const rank = player.king.rank();
-    return player.castlingPossible and player.king.file() == E and player.rook2.file() == H and board.isEmpty(F, rank) and board.isEmpty(G, rank);
+    const rank = player.king.rank;
+    std.debug.print("{},{},{},{},{},{}\n", .{ player.castlingPossible, player.king.file == E, player.rooks.items.len >= 1, player.rooks.items[0].file == H, board.isEmpty(F, rank), board.isEmpty(G, rank) });
+    return player.castlingPossible and player.king.file == E and player.rooks.items.len >= 2 and player.rooks.items[1].file == H and board.isEmpty(F, rank) and board.isEmpty(G, rank);
 }
 
 fn isLongCastlingPossible(player: *const Player, board: *const Board) bool {
-    const rank = player.king.rank();
-    return player.castlingPossible and player.king.file() == E and player.rook2.file() == A and board.isEmpty(B, rank) and board.isEmpty(C, rank) and board.isEmpty(D, rank);
+    const rank = player.king.rank;
+    return player.castlingPossible and player.king.file == E and player.rooks.items.len >= 1 and player.rooks.items[0].file == A and board.isEmpty(B, rank) and board.isEmpty(C, rank) and board.isEmpty(D, rank);
 }
 
 fn isPieceMovePossible(player: *const Player, board: *const Board, move: *const PieceMove) bool {
     return switch (move.piece) {
-        'K' => isKingMoveLegal(player, board, move),
-        'Q' => isQueenMoveLegal(player, board, move),
-        'R' => isRookMoveLegal(player, board, move, true),
-        'N' => isKnightMoveLegal(player, move),
-        'B' => isBishopMoveLegal(player, board, move, true),
-        'P' => isPawnMoveLegal(player, board, move),
+        MPieces.PieceID.king => isKingMoveLegal(player, board, move),
+        MPieces.PieceID.queen => isQueenMoveLegal(player, board, move),
+        MPieces.PieceID.rook => isRookMoveLegal(player, board, move, true),
+        MPieces.PieceID.knight => isKnightMoveLegal(player, move),
+        MPieces.PieceID.bishop => isBishopMoveLegal(player, board, move, true),
+        MPieces.PieceID.pawn => isPawnMoveLegal(player, board, move),
         inline else => unreachable,
     };
 }
 
+fn checkSourcePosition(srcPos: Position, pieces: std.ArrayList(*MPieces.Piece)) bool {
+    var sourceCorrect = false;
+    for (pieces.items) |piece| {
+        sourceCorrect = sourceCorrect or piece.pos().eq(srcPos);
+    }
+    return sourceCorrect;
+}
+
 fn isKingMoveLegal(player: *const Player, board: *const Board, move: *const PieceMove) bool {
-    const fileDiff: i5 = absDiff(move.file, player.king.file());
-    const rankDiff: i5 = absDiff(move.rank, player.king.rank());
+    const fileDiff: i5 = absDiff(move.file, player.king.file);
+    const rankDiff: i5 = absDiff(move.rank, player.king.rank);
     if (fileDiff > 1 or rankDiff > 1) {
         return false;
     }
-    const targetPiece = board.getPiece(move.file, move.rank);
-    switch (targetPiece.*) {
-        //TODO: implement check for covered squares
-        .empty => return true,
-        else => return targetPiece.color() != player.color,
+    const targetPiece = board.getSquare(move.file, move.rank);
+    if (targetPiece.piece == MPieces.PieceID.empty) {
+        return true;
+    } else {
+        return targetPiece.color != player.color;
     }
-    std.debug.print("foo {}", .{board.allocator});
     return false;
 }
 fn isQueenMoveLegal(player: *const Player, board: *const Board, move: *const PieceMove) bool {
-    if (!player.queen.pos().eq(move.srcPos())) {
+    if (!checkSourcePosition(move.srcPos(), player.queens)) {
         return false;
     }
 
     return isRookMoveLegal(player, board, move, false) or isBishopMoveLegal(player, board, move, false);
 }
 fn isRookMoveLegal(player: *const Player, board: *const Board, move: *const PieceMove, checkPiece: bool) bool {
-    if (checkPiece) {
-        if (!player.rook1.pos().eq(move.srcPos()) and !player.rook2.pos().eq(move.srcPos())) {
-            return false;
-        }
+    if (checkPiece and !checkSourcePosition(move.srcPos(), player.rooks)) {
+        return false;
     }
     var rank: i5 = move.sourceRank.?;
     var file: i5 = move.sourceFile.?;
@@ -258,21 +264,20 @@ fn isRookMoveLegal(player: *const Player, board: *const Board, move: *const Piec
     } else {
         return false;
     }
-    return board.isEmpty(move.file, move.rank) or board.getPiece(move.file, move.rank).color() != player.color;
+    return board.isEmpty(move.file, move.rank) or board.getSquare(move.file, move.rank).color != player.color;
 }
 fn isKnightMoveLegal(player: *const Player, move: *const PieceMove) bool {
-    if (!player.knight1.pos().eq(move.srcPos()) and !player.knight2.pos().eq(move.srcPos())) {
+    if (!checkSourcePosition(move.srcPos(), player.knights)) {
         return false;
     }
     const fileDiff: i5 = absDiff(move.file, move.sourceFile.?);
     const rankDiff: i5 = absDiff(move.rank, move.sourceRank.?);
     return (fileDiff == 2 and rankDiff == 1) or (fileDiff == 1 and rankDiff == 2);
 }
+
 fn isBishopMoveLegal(player: *const Player, board: *const Board, move: *const PieceMove, checkPiece: bool) bool {
-    if (checkPiece) {
-        if (!player.bishop1.pos().eq(move.srcPos()) and !player.bishop2.pos().eq(move.srcPos())) {
-            return false;
-        }
+    if (checkPiece and !checkSourcePosition(move.srcPos(), player.bishops)) {
+        return false;
     }
     const rankDiff: i5 = absDiff(move.sourceRank.?, move.rank);
     const fileDiff: i5 = absDiff(move.sourceFile.?, move.file);
@@ -294,7 +299,7 @@ fn isBishopMoveLegal(player: *const Player, board: *const Board, move: *const Pi
         file += fileDir;
     }
 
-    return board.isEmpty(move.file, move.rank) or board.getPiece(move.file, move.rank).color() != player.color;
+    return board.isEmpty(move.file, move.rank) or board.getSquare(move.file, move.rank).color != player.color;
 }
 fn isPawnMoveLegal(player: *const Player, board: *const Board, move: *const PieceMove) bool {
     // TODO: make sure player has a pawn on the source square
@@ -314,11 +319,9 @@ fn isPawnMoveLegal(player: *const Player, board: *const Board, move: *const Piec
         }
     } else {
         if (move.rank == 8 or move.rank == 1) {
-            //promotion move
-            //TODO:
-            return false;
+            return true;
         }
-        if (board.getPiece(move.file, move.rank).color() != player.color and absDiff(move.sourceFile.?, move.file) == 1) {
+        if (board.getSquare(move.file, move.rank).color != player.color and absDiff(move.sourceFile.?, move.file) == 1) {
             //capture move
             return true;
         }
@@ -343,60 +346,16 @@ fn findPawnSourcePosition(move: *PieceMove, player: *Player) void {
     }
     if (move.sourceRank == null) {
         if (player.color == Color.white and move.rank == 4) {
-            switch (move.file) {
-                A => {
-                    if (player.aPawn.rank() == 2) move.sourceRank = 2;
-                },
-                B => {
-                    if (player.bPawn.rank() == 2) move.sourceRank = 2;
-                },
-                C => {
-                    if (player.cPawn.rank() == 2) move.sourceRank = 2;
-                },
-                D => {
-                    if (player.dPawn.rank() == 2) move.sourceRank = 2;
-                },
-                E => {
-                    if (player.ePawn.rank() == 2) move.sourceRank = 2;
-                },
-                F => {
-                    if (player.fPawn.rank() == 2) move.sourceRank = 2;
-                },
-                G => {
-                    if (player.gPawn.rank() == 2) move.sourceRank = 2;
-                },
-                H => {
-                    if (player.hPawn.rank() == 2) move.sourceRank = 2;
-                },
-                else => unreachable,
+            for (player.pawns.items) |pawn| {
+                if (pawn.file == move.file and pawn.rank == 2) {
+                    move.sourceRank = 2;
+                }
             }
         } else if (player.color == Color.black and move.rank == 5) {
-            switch (move.file) {
-                A => {
-                    if (player.aPawn.rank() == 7) move.sourceRank = 7;
-                },
-                B => {
-                    if (player.bPawn.rank() == 7) move.sourceRank = 7;
-                },
-                C => {
-                    if (player.cPawn.rank() == 7) move.sourceRank = 7;
-                },
-                D => {
-                    if (player.dPawn.rank() == 7) move.sourceRank = 7;
-                },
-                E => {
-                    if (player.ePawn.rank() == 7) move.sourceRank = 7;
-                },
-                F => {
-                    if (player.fPawn.rank() == 7) move.sourceRank = 7;
-                },
-                G => {
-                    if (player.gPawn.rank() == 7) move.sourceRank = 7;
-                },
-                H => {
-                    if (player.hPawn.rank() == 7) move.sourceRank = 7;
-                },
-                else => unreachable,
+            for (player.pawns.items) |pawn| {
+                if (pawn.file == move.file and pawn.rank == 7) {
+                    move.sourceRank = 7;
+                }
             }
         }
         if (move.sourceRank == null) {
@@ -405,68 +364,75 @@ fn findPawnSourcePosition(move: *PieceMove, player: *Player) void {
     }
 }
 
+fn findQueenSourcePosition(move: *PieceMove, player: *Player, board: *Board) void {
+    for (player.queens.items) |queen| {
+        if (queen.file == move.file) {
+            move.sourceFile = queen.file;
+            move.sourceRank = queen.rank;
+            if (isRookMoveLegal(player, board, move, false)) {
+                return;
+            }
+        }
+        if (queen.rank == move.rank) {
+            move.sourceFile = queen.file;
+            move.sourceRank = queen.rank;
+            if (isRookMoveLegal(player, board, move, false)) {
+                return;
+            }
+        }
+        const rankDiff1: i5 = absDiff(queen.rank, move.rank);
+        const fileDiff1: i5 = absDiff(queen.file, move.file);
+
+        if (rankDiff1 == fileDiff1) {
+            move.sourceFile = queen.file;
+            move.sourceRank = queen.rank;
+            if (isBishopMoveLegal(player, board, move, false)) {
+                return;
+            }
+        }
+    }
+}
 fn findRookSourcePosition(move: *PieceMove, player: *Player, board: *Board) void {
     //TODO: "Rb1" is legal input if we have a rook both on A1 and F1 and
     //// there is a piece on C1 or D1 or E1, becuase then I can only be the rook form A1
-    if (player.rook1.file() == move.file) {
-        move.sourceFile = player.rook1.file();
-        move.sourceRank = player.rook1.rank();
-        if (isRookMoveLegal(player, board, move, false)) {
-            return;
+    for (player.rooks.items) |rook| {
+        if (rook.file == move.file) {
+            move.sourceFile = rook.file;
+            move.sourceRank = rook.rank;
+            if (isRookMoveLegal(player, board, move, false)) {
+                return;
+            }
         }
-    }
-    if (player.rook2.file() == move.file) {
-        move.sourceFile = player.rook2.file();
-        move.sourceRank = player.rook2.rank();
-        if (isRookMoveLegal(player, board, move, false)) {
-            return;
-        }
-    }
-    if (player.rook1.rank() == move.rank) {
-        move.sourceFile = player.rook1.file();
-        move.sourceRank = player.rook1.rank();
-        if (isRookMoveLegal(player, board, move, false)) {
-            return;
-        }
-    }
-    if (player.rook2.rank() == move.rank) {
-        move.sourceFile = player.rook2.file();
-        move.sourceRank = player.rook2.rank();
-        if (isRookMoveLegal(player, board, move, false)) {
-            return;
+        if (rook.rank == move.rank) {
+            move.sourceFile = rook.file;
+            move.sourceRank = rook.rank;
+            if (isRookMoveLegal(player, board, move, false)) {
+                return;
+            }
         }
     }
 }
 fn findKnightSourcePosition(move: *PieceMove, player: *Player) void {
-    const fileDiff1: i5 = absDiff(move.file, player.knight1.file());
-    const rankDiff1: i5 = absDiff(move.rank, player.knight1.rank());
-    if ((fileDiff1 == 2 and rankDiff1 == 1) or (fileDiff1 == 1 and rankDiff1 == 2)) {
-        move.sourceFile = player.knight1.file();
-        move.sourceRank = player.knight1.rank();
-        return;
-    }
-    const fileDiff2: i5 = absDiff(move.file, player.knight2.file());
-    const rankDiff2: i5 = absDiff(move.rank, player.knight2.rank());
-    if ((fileDiff2 == 2 and rankDiff2 == 1) or (fileDiff2 == 1 and rankDiff2 == 2)) {
-        move.sourceFile = player.knight2.file();
-        move.sourceRank = player.knight2.rank();
+    for (player.knights.items) |knight| {
+        const fileDiff1: i5 = absDiff(move.file, knight.file);
+        const rankDiff1: i5 = absDiff(move.rank, knight.rank);
+        if ((fileDiff1 == 2 and rankDiff1 == 1) or (fileDiff1 == 1 and rankDiff1 == 2)) {
+            move.sourceFile = knight.file;
+            move.sourceRank = knight.rank;
+            return;
+        }
     }
 }
 fn findBishopSourcePosition(move: *PieceMove, player: *Player) void {
-    const rankDiff1: i5 = absDiff(player.bishop1.rank(), move.rank);
-    const fileDiff1: i5 = absDiff(player.bishop1.file(), move.file);
+    for (player.bishops.items) |bishop| {
+        const rankDiff1: i5 = absDiff(bishop.rank, move.rank);
+        const fileDiff1: i5 = absDiff(bishop.file, move.file);
 
-    if (rankDiff1 == fileDiff1) {
-        move.sourceFile = player.bishop1.file();
-        move.sourceRank = player.bishop1.rank();
-        return;
-    }
-    const rankDiff2: i5 = absDiff(player.bishop2.rank(), move.rank);
-    const fileDiff2: i5 = absDiff(player.bishop2.file(), move.file);
-    if (rankDiff2 == fileDiff2) {
-        move.sourceFile = player.bishop2.file();
-        move.sourceRank = player.bishop2.rank();
-        return;
+        if (rankDiff1 == fileDiff1) {
+            move.sourceFile = bishop.file;
+            move.sourceRank = bishop.rank;
+            return;
+        }
     }
 }
 
@@ -480,19 +446,15 @@ fn findSourcePosition(move: *Move, player: *Player, board: *Board) void {
                 return;
             }
             switch (_move.piece) {
-                'K' => {
-                    _move.sourceFile = player.king.file();
-                    _move.sourceRank = player.king.rank();
+                MPieces.PieceID.king => {
+                    _move.sourceFile = player.king.file;
+                    _move.sourceRank = player.king.rank;
                 },
-                'Q' => {
-                    //FIXME: could be any piece not just 'player.queen'
-                    _move.sourceFile = player.queen.file();
-                    _move.sourceRank = player.queen.rank();
-                },
-                'R' => findRookSourcePosition(_move, player, board),
-                'N' => findKnightSourcePosition(_move, player),
-                'B' => findBishopSourcePosition(_move, player),
-                'P' => findPawnSourcePosition(_move, player),
+                MPieces.PieceID.queen => findQueenSourcePosition(_move, player, board),
+                MPieces.PieceID.rook => findRookSourcePosition(_move, player, board),
+                MPieces.PieceID.knight => findKnightSourcePosition(_move, player),
+                MPieces.PieceID.bishop => findBishopSourcePosition(_move, player),
+                MPieces.PieceID.pawn => findPawnSourcePosition(_move, player),
                 inline else => unreachable,
             }
             return;
@@ -511,15 +473,17 @@ test "Is Move Legal" {
     const allocator = std.testing.allocator;
 
     // init TODO: make function
-    var board = try Board.new(allocator);
-    defer board.destory();
-    var white = Player.new(Color.white);
-    var black = Player.new(Color.black);
-    Player.initPiecePointer(&white);
-    Player.initPiecePointer(&black);
+    var white = try Player.new(Color.white, allocator);
+    var black = try Player.new(Color.black, allocator);
+    var board = try Board.new(allocator, &white, &black);
+    defer board.destroy();
+    try white.initPieces();
+    try black.initPieces();
+    defer white.destroy();
+    defer black.destroy();
     for (0..16) |idx| {
-        board.putPiece(white.pieces[idx]);
-        board.putPiece(black.pieces[idx]);
+        board.putPiece(&white.pieces[idx]);
+        board.putPiece(&black.pieces[idx]);
     }
 
     // done init
@@ -530,54 +494,48 @@ test "Is Move Legal" {
     try expect(isMoveLegal(Move{ .pieceMove = PieceMove{ .rank = 4, .file = A, .piece = 'P', .sourceRank = 2, .sourceFile = A } }, &board, &white));
     try expect(isMoveLegal(Move{ .pieceMove = PieceMove{ .rank = 3, .file = A, .piece = 'P', .sourceRank = 2, .sourceFile = A } }, &board, &white));
     try expect(isMoveLegal(Move{ .pieceMove = PieceMove{ .rank = 3, .file = C, .piece = 'N', .sourceRank = 1, .sourceFile = B } }, &board, &white));
-    var board2 = try Board.new(allocator);
-    defer board2.destory();
-    board2.putPiece(&white.rook1);
+    var board2 = try Board.new(allocator, &white, &black);
+    defer board2.destroy();
+    board2.putPiece(white.rooks.items[0]);
     try expect(isMoveLegal(Move{ .pieceMove = PieceMove{ .rank = 7, .file = A, .piece = 'R', .sourceRank = 1, .sourceFile = A } }, &board2, &white));
-    board2.putPiece(&black.aPawn);
+    board2.putPiece(black.pawns.items[0]);
     try expect(isMoveLegal(Move{ .pieceMove = PieceMove{ .rank = 7, .file = A, .piece = 'R', .sourceRank = 1, .sourceFile = A } }, &board2, &white));
-    white.aPawn.pawn.rank = 7;
-    board2.putPiece(&white.aPawn);
+    white.pawns.items[0].rank = 7;
+    board2.putPiece(white.pawns.items[0]);
     try expect(!isMoveLegal(Move{ .pieceMove = PieceMove{ .rank = 7, .file = A, .piece = 'R', .sourceRank = 1, .sourceFile = A } }, &board2, &white));
 
-    board2.putPiece(&white.bishop1);
+    board2.putPiece(white.bishops.items[0]);
     try expect(isMoveLegal(Move{ .pieceMove = PieceMove{ .rank = 5, .file = G, .piece = 'B', .sourceRank = 1, .sourceFile = C } }, &board2, &white));
     try expect(!isMoveLegal(Move{ .pieceMove = PieceMove{ .rank = 5, .file = H, .piece = 'B', .sourceRank = 1, .sourceFile = C } }, &board2, &white));
 }
 
-fn makeMove(move: *Move, player: *Player, board: *Board) void {
+fn makeMove(move: *Move, player: *Player, board: *Board) !void {
     switch (move.*) {
         .pieceMove => |pmove| {
             var piece = player.findPiece(&pmove.srcPos());
-            board.evictField(piece.file(), piece.rank());
+            board.evictField(piece.file, piece.rank);
             if (pmove.promoteTo != null) {
-                piece.* = switch (pmove.promoteTo.?) {
-                    'Q' => pieceModule.Queen.new(player.color),
-                    'R' => pieceModule.Rook.new(player.color, pmove.file),
-                    'N' => pieceModule.Knight.new(player.color, pmove.file),
-                    'B' => pieceModule.Bishop.new(player.color, pmove.file),
-                    inline else => unreachable,
-                };
+                try player.promote(piece, pmove.promoteTo.?);
             }
-            piece.setFile(move.pieceMove.file);
-            piece.setRank(move.pieceMove.rank);
+            piece.file = (move.pieceMove.file);
+            piece.rank = (move.pieceMove.rank);
             board.putPiece(piece);
         },
         .castling => {
-            board.evictField(player.king.file(), player.king.rank());
-            board.evictField(player.rook2.file(), player.rook2.rank());
-            player.king.setFile(G);
-            player.rook2.setFile(F);
-            board.putPiece(&player.king);
-            board.putPiece(&player.rook2);
+            board.evictField(player.king.file, player.king.rank);
+            board.evictField(player.rooks.items[1].file, player.rooks.items[1].rank);
+            player.king.file = G;
+            player.rooks.items[1].file = F;
+            board.putPiece(player.king);
+            board.putPiece(player.rooks.items[1]);
         },
         .castlingLong => {
-            board.evictField(player.king.file(), player.king.rank());
-            board.evictField(player.rook1.file(), player.rook1.rank());
-            player.king.setFile(C);
-            player.rook1.setFile(D);
-            board.putPiece(&player.king);
-            board.putPiece(&player.rook1);
+            board.evictField(player.king.file, player.king.rank);
+            board.evictField(player.rooks.items[0].file, player.rooks.items[0].rank);
+            player.king.file = C;
+            player.rooks.items[0].file = D;
+            board.putPiece(player.king);
+            board.putPiece(player.rooks.items[0]);
         },
     }
 }
@@ -590,15 +548,17 @@ pub fn playGame(game: anytype) !void {
     const allocator = gpa.allocator();
 
     // init TODO: make function
-    var board = try Board.new(allocator);
-    defer board.destory();
-    var white = Player.new(Color.white);
-    var black = Player.new(Color.black);
-    Player.initPiecePointer(&white);
-    Player.initPiecePointer(&black);
+    var white = try Player.new(Color.white, allocator);
+    var black = try Player.new(Color.black, allocator);
+    var board = try Board.new(allocator, &white, &black);
+    defer board.destroy();
+    try white.initPieces();
+    try black.initPieces();
+    defer white.destroy();
+    defer black.destroy();
     for (0..16) |idx| {
-        board.putPiece(white.pieces[idx]);
-        board.putPiece(black.pieces[idx]);
+        board.putPiece(&white.pieces[idx]);
+        board.putPiece(&black.pieces[idx]);
     }
     var i: u8 = 0;
     var current_player: *Player = undefined;
@@ -618,9 +578,11 @@ pub fn playGame(game: anytype) !void {
         std.debug.print("Move: {}\n", .{move});
         try expect(isMoveLegal(move, &board, current_player));
 
-        makeMove(&move, current_player, &board);
+        try makeMove(&move, current_player, &board);
         i += 1;
     }
+    try board.print(stdout);
+    try bw.flush();
 }
 
 test "parse game1" {
@@ -631,15 +593,17 @@ test "parse game1" {
     const allocator = std.testing.allocator;
 
     // init TODO: make function
-    var board = try Board.new(allocator);
-    defer board.destory();
-    var white = Player.new(Color.white);
-    var black = Player.new(Color.black);
-    Player.initPiecePointer(&white);
-    Player.initPiecePointer(&black);
+    var white = try Player.new(Color.white, allocator);
+    var black = try Player.new(Color.black, allocator);
+    var board = try Board.new(allocator, &white, &black);
+    defer board.destroy();
+    try white.initPieces();
+    try black.initPieces();
+    defer white.destroy();
+    defer black.destroy();
     for (0..16) |idx| {
-        board.putPiece(white.pieces[idx]);
-        board.putPiece(black.pieces[idx]);
+        board.putPiece(&white.pieces[idx]);
+        board.putPiece(&black.pieces[idx]);
     }
     var i: u4 = 0;
     var current_player: *Player = undefined;
@@ -659,7 +623,7 @@ test "parse game1" {
         std.debug.print("Move: {}\n", .{move});
         try expect(isMoveLegal(move, &board, current_player));
 
-        makeMove(&move, current_player, &board);
+        try makeMove(&move, current_player, &board);
         i += 1;
     }
 }

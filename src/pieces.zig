@@ -11,168 +11,112 @@ const F = board.F;
 const G = board.G;
 const H = board.H;
 
-pub const TPiece = u16;
-const BLACK_KING: TPiece = '♔';
-const BLACK_QUEEN: TPiece = '♕';
-const BLACK_KNIGHT: TPiece = '♘';
-const BLACK_BISHOP: TPiece = '♗';
-const BLACK_PAWN: TPiece = '♙';
-const BLACK_ROOK: TPiece = '♖';
-const WHITE_KING: TPiece = '♚';
-const WHITE_QUEEN: TPiece = '♛';
-const WHITE_KNIGHT: TPiece = '♞';
-const WHITE_BISHOP: TPiece = '♝';
-const WHITE_PAWN: TPiece = '♟';
-const WHITE_ROOK: TPiece = '♜';
+pub const TPiece = enum(u16) {
+    BLACK_KING = '♔',
+    BLACK_QUEEN = '♕',
+    BLACK_KNIGHT = '♘',
+    BLACK_BISHOP = '♗',
+    BLACK_PAWN = '♙',
+    BLACK_ROOK = '♖',
+    WHITE_KING = '♚',
+    WHITE_QUEEN = '♛',
+    WHITE_KNIGHT = '♞',
+    WHITE_BISHOP = '♝',
+    WHITE_PAWN = '♟',
+    WHITE_ROOK = '♜',
+    EMPTY = ' ',
+};
 
-pub const Empty = __Empty.new();
+pub const Empty = __Empty{};
 
-pub const Piece = union(enum) {
-    pawn: Pawn,
-    rook: Rook,
-    knight: Knight,
-    bishop: Bishop,
-    queen: Queen,
-    king: King,
-    empty: __Empty,
+pub const PieceID = enum(u8) {
+    pawn = 'P',
+    rook = 'R',
+    knight = 'N',
+    bishop = 'B',
+    queen = 'Q',
+    king = 'K',
+    empty = ' ',
+};
 
-    pub fn icon(self: Piece) TPiece {
-        switch (self) {
-            inline else => |case| return case.icon,
-        }
-    }
-    pub fn file(self: Piece) u4 {
-        switch (self) {
-            .empty => unreachable,
-            inline else => |case| return case.file,
-        }
-    }
-
-    pub fn rank(self: Piece) u4 {
-        switch (self) {
-            .empty => unreachable,
-            inline else => |case| return case.rank,
-        }
-    }
-    pub fn color(self: Piece) Color {
-        switch (self) {
-            .empty => unreachable,
-            inline else => |case| return case.color,
-        }
-    }
+pub const Piece = struct {
+    piece: PieceID,
+    icon: TPiece,
+    file: u4,
+    rank: u4,
+    color: Color,
 
     pub fn pos(self: Piece) Position {
-        return Position{ .file = self.file(), .rank = self.rank() };
+        return Position{ .file = self.file, .rank = self.rank };
     }
 
-    pub fn setFile(self: *Piece, file_: u4) void {
-        switch (self.*) {
-            .rook => self.rook.file = file_,
-            .pawn => self.pawn.file = file_,
-            .knight => self.knight.file = file_,
-            .bishop => self.bishop.file = file_,
-            .queen => self.queen.file = file_,
-            .king => self.king.file = file_,
-            .empty => unreachable,
+    pub fn promote(self: *Piece, promoteTo: PieceID) void {
+        if (promoteTo == PieceID.king or promoteTo == PieceID.pawn or promoteTo == PieceID.empty) {
+            unreachable;
         }
-    }
-
-    pub fn setRank(self: *Piece, rank_: u4) void {
-        switch (self.*) {
-            .rook => self.rook.rank = rank_,
-            .pawn => self.pawn.rank = rank_,
-            .knight => self.knight.rank = rank_,
-            .bishop => self.bishop.rank = rank_,
-            .queen => self.queen.rank = rank_,
-            .king => self.king.rank = rank_,
-            .empty => unreachable,
-        }
-    }
-};
-
-pub const King = struct {
-    icon: TPiece,
-    file: u4,
-    rank: u4,
-    color: Color,
-
-    pub fn new(color: Color) Piece {
-        switch (color) {
-            Color.white => return Piece{ .king = King{ .icon = WHITE_KING, .rank = 1, .file = E, .color = color } },
-            Color.black => return Piece{ .king = King{ .icon = BLACK_KING, .rank = 8, .file = E, .color = color } },
-        }
-    }
-};
-pub const Pawn = struct {
-    icon: TPiece,
-    file: u4,
-    rank: u4,
-    color: Color,
-
-    pub fn new(color: Color, file: u4) Piece {
-        switch (color) {
-            Color.white => return Piece{ .pawn = Pawn{ .icon = WHITE_PAWN, .rank = 2, .file = file, .color = color } },
-            Color.black => return Piece{ .pawn = Pawn{ .icon = BLACK_PAWN, .rank = 7, .file = file, .color = color } },
-        }
-    }
-};
-pub const Rook = struct {
-    icon: TPiece,
-    file: u4,
-    rank: u4,
-    color: Color,
-
-    pub fn new(color: Color, file: u4) Piece {
-        switch (color) {
-            Color.white => return Piece{ .rook = Rook{ .icon = WHITE_ROOK, .rank = 1, .file = file, .color = color } },
-            Color.black => return Piece{ .rook = Rook{ .icon = BLACK_ROOK, .rank = 8, .file = file, .color = color } },
-        }
-    }
-};
-pub const Knight = struct {
-    icon: TPiece,
-    file: u4,
-    rank: u4,
-    color: Color,
-
-    pub fn new(color: Color, file: u4) Piece {
-        switch (color) {
-            Color.white => return Piece{ .knight = Knight{ .icon = WHITE_KNIGHT, .rank = 1, .file = file, .color = color } },
-            Color.black => return Piece{ .knight = Knight{ .icon = BLACK_KNIGHT, .rank = 8, .file = file, .color = color } },
-        }
-    }
-};
-pub const Bishop = struct {
-    icon: TPiece,
-    file: u4,
-    rank: u4,
-    color: Color,
-
-    pub fn new(color: Color, file: u4) Piece {
-        switch (color) {
-            Color.white => return Piece{ .bishop = Bishop{ .icon = WHITE_BISHOP, .rank = 1, .file = file, .color = color } },
-            Color.black => return Piece{ .bishop = Bishop{ .icon = BLACK_BISHOP, .rank = 8, .file = file, .color = color } },
-        }
-    }
-};
-pub const Queen = struct {
-    icon: TPiece,
-    file: u4,
-    rank: u4,
-    color: Color,
-
-    pub fn new(color: Color) Piece {
-        switch (color) {
-            Color.white => return Piece{ .queen = Queen{ .icon = WHITE_QUEEN, .rank = 1, .file = D, .color = color } },
-            Color.black => return Piece{ .queen = Queen{ .icon = BLACK_QUEEN, .rank = 8, .file = D, .color = color } },
+        self.piece = promoteTo;
+        if (self.color == Color.white) {
+            self.icon = switch (promoteTo) {
+                PieceID.queen => TPiece.WHITE_QUEEN,
+                PieceID.rook => TPiece.WHITE_ROOK,
+                PieceID.knight => TPiece.WHITE_KNIGHT,
+                PieceID.bishop => TPiece.WHITE_BISHOP,
+                inline else => unreachable,
+            };
+        } else {
+            self.icon = switch (promoteTo) {
+                PieceID.queen => TPiece.BLACK_QUEEN,
+                PieceID.rook => TPiece.BLACK_ROOK,
+                PieceID.knight => TPiece.BLACK_KNIGHT,
+                PieceID.bishop => TPiece.BLACK_BISHOP,
+                inline else => unreachable,
+            };
         }
     }
 };
 
-pub const __Empty = struct {
-    icon: TPiece = ' ',
-
-    pub fn new() Piece {
-        return Piece{ .empty = __Empty{} };
+pub fn newKing(color: Color) Piece {
+    switch (color) {
+        Color.white => return Piece{ .piece = PieceID.king, .icon = TPiece.WHITE_KING, .rank = 1, .file = E, .color = color },
+        Color.black => return Piece{ .piece = PieceID.king, .icon = TPiece.BLACK_KING, .rank = 8, .file = E, .color = color },
     }
+}
+pub fn newPawn(color: Color, file: u4) Piece {
+    switch (color) {
+        Color.white => return Piece{ .piece = PieceID.pawn, .icon = TPiece.WHITE_PAWN, .rank = 2, .file = file, .color = color },
+        Color.black => return Piece{ .piece = PieceID.pawn, .icon = TPiece.BLACK_PAWN, .rank = 7, .file = file, .color = color },
+    }
+}
+pub fn newRook(color: Color, file: u4) Piece {
+    switch (color) {
+        Color.white => return Piece{ .piece = PieceID.rook, .icon = TPiece.WHITE_ROOK, .rank = 1, .file = file, .color = color },
+        Color.black => return Piece{ .piece = PieceID.rook, .icon = TPiece.BLACK_ROOK, .rank = 8, .file = file, .color = color },
+    }
+}
+pub fn newKnight(color: Color, file: u4) Piece {
+    switch (color) {
+        Color.white => return Piece{ .piece = PieceID.knight, .icon = TPiece.WHITE_KNIGHT, .rank = 1, .file = file, .color = color },
+        Color.black => return Piece{ .piece = PieceID.knight, .icon = TPiece.BLACK_KNIGHT, .rank = 8, .file = file, .color = color },
+    }
+}
+pub fn newBishop(color: Color, file: u4) Piece {
+    switch (color) {
+        Color.white => return Piece{ .piece = PieceID.bishop, .icon = TPiece.WHITE_BISHOP, .rank = 1, .file = file, .color = color },
+        Color.black => return Piece{ .piece = PieceID.bishop, .icon = TPiece.BLACK_BISHOP, .rank = 8, .file = file, .color = color },
+    }
+}
+pub fn newQueen(color: Color) Piece {
+    switch (color) {
+        Color.white => return Piece{ .piece = PieceID.queen, .icon = TPiece.WHITE_QUEEN, .rank = 1, .file = D, .color = color },
+        Color.black => return Piece{ .piece = PieceID.queen, .icon = TPiece.BLACK_QUEEN, .rank = 8, .file = D, .color = color },
+    }
+}
+
+pub var __Empty = Piece{
+    .icon = TPiece.EMPTY,
+    .piece = PieceID.empty,
+    //below doesn't matter
+    .file = 0,
+    .rank = 0,
+    .color = Color.white,
 };
