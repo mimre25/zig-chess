@@ -25,12 +25,20 @@ const MoveType = enum {
     pieceMove,
     castling,
     castlingLong,
+    resign,
+    drawOffer,
+    drawAccept,
+    drawDecline,
 };
 
 pub const Move = union(MoveType) {
     pieceMove: PieceMove,
     castling: bool,
     castlingLong: bool,
+    resign: bool,
+    drawOffer: bool,
+    drawAccept: bool,
+    drawDecline: bool,
 };
 
 pub const PieceMove = struct {
@@ -167,10 +175,19 @@ pub fn parse_move(input: []const u8) ParseError!Move {
     //0-0-0
     // Regex: ^([KNQRB])?([a-h])?x?([a-h])([1-8]).*
     // Screw regex x)
-    if (input[0] == 'O') {
-        return parse_castling(input);
+    const trimmed_input = std.mem.sliceTo(input, '\n');
+    if (std.mem.eql(u8, trimmed_input, "resign")) {
+        return Move{ .resign = true };
+    } else if (std.mem.eql(u8, trimmed_input, "draw")) {
+        return Move{ .drawOffer = true };
+    } else if (std.mem.eql(u8, trimmed_input, "accept")) {
+        return Move{ .drawAccept = true };
+    } else if (std.mem.eql(u8, trimmed_input, "decline")) {
+        return Move{ .drawDecline = true };
+    } else if (input[0] == 'O') {
+        return parse_castling(trimmed_input);
     } else {
-        return try parse_piece_move(input);
+        return try parse_piece_move(trimmed_input);
     }
 }
 
@@ -335,6 +352,7 @@ fn isMoveLegal(move: Move, board: *Board, player: *Player) bool {
         .pieceMove => return isPieceMovePossible(player, board, &move.pieceMove),
         .castling => return isCastlingPossible(player, board),
         .castlingLong => return isLongCastlingPossible(player, board),
+        inline else => unreachable,
     }
 
     return true;
@@ -459,6 +477,7 @@ fn findSourcePosition(move: *Move, player: *Player, board: *Board) void {
             }
             return;
         },
+        inline else => unreachable,
     }
 }
 
