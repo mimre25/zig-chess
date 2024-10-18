@@ -7,6 +7,7 @@ const Board = MBoard.Board;
 const expect = std.testing.expect;
 const Color = MPlayer.Color;
 const Position = MBoard.Position;
+const ask_user = @import("utils.zig").ask_user;
 
 const A = MBoard.A;
 const B = MBoard.B;
@@ -20,6 +21,13 @@ const H = MBoard.H;
 fn absDiff(a: u4, b: u4) i5 {
     return @intCast(@abs(a - @as(i5, b)));
 }
+
+const GameResult = enum {
+    draw,
+    whiteWins,
+    blackWins,
+    ongoing,
+};
 
 const MoveType = enum {
     pieceMove,
@@ -556,10 +564,44 @@ fn makeMove(move: *Move, player: *Player, board: *Board) !void {
             board.putPiece(player.king);
             board.putPiece(player.rooks.items[0]);
         },
+        inline else => unreachable,
     }
 }
 
-pub fn playGame(game: anytype) !void {
+fn playRound(move_input: []const u8, current_player: *Player, board: *Board, stdout: anytype) !GameResult {
+    std.debug.print("Move: {s}\n", .{move_input});
+    var move = try parse_move(move_input);
+    switch (move) {
+        .drawOffer => {
+            try stdout.print("{s} offers a draw\n", .{@tagName(current_player.color)});
+            return GameResult.ongoing;
+        },
+        .drawAccept => {
+            try stdout.print("Draw accepted\n", .{});
+            return GameResult.draw;
+        },
+        .drawDecline => {
+            try stdout.print("Draw declined\n", .{});
+            return GameResult.ongoing;
+        },
+        .resign => {
+            try stdout.print("{s} resigns\n", .{@tagName(current_player.color)});
+            switch (current_player.color) {
+                Color.white => return GameResult.blackWins,
+                Color.black => return GameResult.whiteWins,
+            }
+        },
+        inline else => {},
+    }
+    findSourcePosition(&move, current_player, board);
+    try expect(isMoveLegal(move, board, current_player));
+
+    try makeMove(&move, current_player, board);
+
+    return GameResult.ongoing;
+}
+
+pub fn playGame(interactive: bool, game: ?[]const []const u8) !void {
     const stdout_file = std.io.getStdOut().writer();
     var bw = std.io.bufferedWriter(stdout_file);
     const stdout = bw.writer();
@@ -581,26 +623,38 @@ pub fn playGame(game: anytype) !void {
     }
     var i: u8 = 0;
     var current_player: *Player = undefined;
-    for (game) |move_input| {
-        try board.print(stdout);
-        try bw.flush();
+    var gameResult = GameResult.ongoing;
+    if (interactive) {
+        while (gameResult == GameResult.ongoing) {
+            try board.print(stdout);
+            try bw.flush();
+            var input_buffer: [10]u8 = undefined;
+            const move_input = try ask_user(&input_buffer);
 
-        std.debug.print("Move: {s}\n", .{move_input});
-        var move = try parse_move(move_input);
-
-        if (@mod(i, 2) == 0) {
-            current_player = &white;
-        } else {
-            current_player = &black;
+            if (@mod(i, 2) == 0) {
+                current_player = &white;
+            } else {
+                current_player = &black;
+            }
+            gameResult = try playRound(move_input, current_player, &board, stdout);
+            i += 1;
         }
-        findSourcePosition(&move, current_player, &board);
-        std.debug.print("Move: {}\n", .{move});
-        try expect(isMoveLegal(move, &board, current_player));
+    } else {
+        for (game.?) |move_input| {
+            try board.print(stdout);
+            try bw.flush();
 
-        try makeMove(&move, current_player, &board);
-        i += 1;
+            if (@mod(i, 2) == 0) {
+                current_player = &white;
+            } else {
+                current_player = &black;
+            }
+            gameResult = try playRound(move_input, current_player, &board, stdout);
+            i += 1;
+        }
     }
     try board.print(stdout);
+    try stdout.print("Game Over. {s}\n", .{@tagName(gameResult)});
     try bw.flush();
 }
 
