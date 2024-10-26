@@ -13,6 +13,10 @@ const F = MBoard.F;
 const G = MBoard.G;
 const H = MBoard.H;
 
+pub const PlayerError = error{
+    NoPieceFound,
+};
+
 pub const Player = struct {
     pieces: []MPieces.Piece,
     castlingPossible: bool = true,
@@ -79,13 +83,13 @@ pub const Player = struct {
         self.pawns.deinit();
     }
 
-    pub fn findPiece(self: Player, pos: *const Position) *MPieces.Piece {
+    pub fn findPiece(self: Player, pos: *const Position) !*MPieces.Piece {
         for (self.pieces) |*piece| {
             if (pos.eq(piece.pos())) {
                 return piece;
             }
         }
-        unreachable;
+        return PlayerError.NoPieceFound;
     }
 
     pub fn takePiece(self: *Player, piece: *MPieces.Piece) void {

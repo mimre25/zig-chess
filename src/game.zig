@@ -91,6 +91,7 @@ const ParseError = error{
     InvalidRank,
     InvalidFile,
     InvalidCastling,
+    InvalidMove,
 };
 
 fn parse_piece(input: u8) ParseError!u8 {
@@ -184,6 +185,9 @@ pub fn parse_move(input: []const u8) ParseError!Move {
     // Regex: ^([KNQRB])?([a-h])?x?([a-h])([1-8]).*
     // Screw regex x)
     const trimmed_input = std.mem.sliceTo(input, '\n');
+    if (trimmed_input.len < 2) {
+        return ParseError.InvalidMove;
+    }
     if (std.mem.eql(u8, trimmed_input, "resign")) {
         return Move{ .resign = true };
     } else if (std.mem.eql(u8, trimmed_input, "draw")) {
@@ -224,6 +228,9 @@ fn isLongCastlingPossible(player: *const Player, board: *const Board) bool {
 }
 
 fn isPieceMovePossible(player: *const Player, board: *const Board, move: *const PieceMove) bool {
+    if (move.sourceFile == null or move.sourceRank == null) {
+        return false;
+    }
     return switch (move.piece) {
         MPieces.PieceID.king => isKingMoveLegal(player, board, move),
         MPieces.PieceID.queen => isQueenMoveLegal(player, board, move),
@@ -539,7 +546,7 @@ test "Is Move Legal" {
 fn makeMove(move: *Move, player: *Player, board: *Board) !void {
     switch (move.*) {
         .pieceMove => |pmove| {
-            var piece = player.findPiece(&pmove.srcPos());
+            var piece = try player.findPiece(&pmove.srcPos());
             board.evictField(piece.file, piece.rank);
             if (pmove.promoteTo != null) {
                 try player.promote(piece, pmove.promoteTo.?);
@@ -623,7 +630,7 @@ pub fn playGame(interactive: bool, game: ?[]const []const u8) !void {
     }
     var i: u8 = 0;
     var current_player: *Player = undefined;
-    var gameResult = GameResult.ongoing;
+    var gameResult: GameResult = GameResult.ongoing;
     if (interactive) {
         while (gameResult == GameResult.ongoing) {
             try board.print(stdout);
@@ -636,7 +643,16 @@ pub fn playGame(interactive: bool, game: ?[]const []const u8) !void {
             } else {
                 current_player = &black;
             }
-            gameResult = try playRound(move_input, current_player, &board, stdout);
+            gameResult = playRound(move_input, current_player, &board, stdout) catch |err| {
+                switch (err) {
+                    ParseError.InvalidRank => try stdout.print("Parser error: {}\n", .{err}),
+                    ParseError.InvalidFile => try stdout.print("Parser error: {}\n", .{err}),
+                    ParseError.InvalidPiece => try stdout.print("Parser error: {}\n", .{err}),
+                    ParseError.InvalidCastling => try stdout.print("Parser error: {}\n", .{err}),
+                    inline else => try stdout.print("Unknown error {}\n", .{err}),
+                }
+                continue;
+            };
             i += 1;
         }
     } else {
