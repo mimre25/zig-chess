@@ -130,7 +130,7 @@ fn parseFile(input: u8) ParseError!u4 {
         else => ParseError.InvalidPiece,
     };
 }
-//TODO: make File and Rank type aliases
+
 fn parsePieceMove(input: []const u8) ParseError!Move {
     const piece = try parsePiece(input[0]);
     var start_idx: u4 = 0;
@@ -334,7 +334,6 @@ fn isBishopMoveLegal(player: *const Player, board: *const Board, move: *const Pi
     return board.isEmpty(move.file, move.rank) or board.getSquare(move.file, move.rank).color != player.color;
 }
 fn isPawnMoveLegal(player: *const Player, board: *const Board, move: *const PieceMove) bool {
-    // TODO: make sure player has a pawn on the source square
     //normal move
     if (move.source_file == move.file) {
         if (move.rank == 8 or move.rank == 1) {
@@ -426,8 +425,6 @@ fn findQueenSourcePosition(move: *PieceMove, player: *Player, board: *Board) voi
     }
 }
 fn findRookSourcePosition(move: *PieceMove, player: *Player, board: *Board) void {
-    //TODO: "Rb1" is legal input if we have a rook both on A1 and F1 and
-    //// there is a piece on C1 or D1 or E1, becuase then I can only be the rook form A1
     for (player.rooks.items) |rook| {
         if (rook.file == move.file) {
             move.source_file = rook.file;
@@ -506,7 +503,6 @@ fn findSourcePosition(move: *Move, player: *Player, board: *Board) void {
 test "Is Move Legal" {
     const allocator = std.testing.allocator;
 
-    // init TODO: make function
     var white = try Player.new(Color.white, allocator);
     var black = try Player.new(Color.black, allocator);
     var board = try Board.new(allocator, &white, &black);
@@ -615,7 +611,6 @@ pub fn playGame(interactive: bool, game: ?[]const []const u8) !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
 
-    // init TODO: make function
     var white = try Player.new(Color.white, allocator);
     var black = try Player.new(Color.black, allocator);
     var board = try Board.new(allocator, &white, &black);
@@ -681,7 +676,6 @@ test "parse game1" {
     const stdout = bw.writer();
     const allocator = std.testing.allocator;
 
-    // init TODO: make function
     var white = try Player.new(Color.white, allocator);
     var black = try Player.new(Color.black, allocator);
     var board = try Board.new(allocator, &white, &black);
