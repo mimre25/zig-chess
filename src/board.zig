@@ -2,7 +2,7 @@ const std = @import("std");
 const MPieces = @import("pieces.zig");
 const MPlayer = @import("player.zig");
 
-const TPiece = MPieces.TPiece;
+const Icon = MPieces.Icon;
 const Piece = MPieces.Piece;
 var EmptySquare = &MPieces.__Empty;
 
@@ -28,8 +28,8 @@ pub const Rank = struct {
     files: []*Piece,
     num: u4,
 
-    pub fn new(rankNumber: u4, allocator: std.mem.Allocator) !Rank {
-        const rank = Rank{ .files = try allocator.alloc(*Piece, 8), .num = rankNumber };
+    pub fn new(rank_number: u4, allocator: std.mem.Allocator) !Rank {
+        const rank = Rank{ .files = try allocator.alloc(*Piece, 8), .num = rank_number };
         std.mem.copyForwards(*Piece, rank.files, &[_]*Piece{
             EmptySquare,
         } ** 8);
@@ -104,13 +104,13 @@ pub const Board = struct {
     }
 
     pub fn putPiece(self: Board, piece: *Piece) void {
-        const currentPiece = self.getSquare(piece.file, piece.rank);
-        if (currentPiece != EmptySquare) {
-            const owner = switch (currentPiece.color) {
+        const current_piece = self.getSquare(piece.file, piece.rank);
+        if (current_piece != EmptySquare) {
+            const owner = switch (current_piece.color) {
                 MPlayer.Color.white => self.white,
                 MPlayer.Color.black => self.black,
             };
-            owner.takePiece(currentPiece);
+            owner.takePiece(current_piece);
         }
 
         self.ranks[piece.rank].putPiece(piece);

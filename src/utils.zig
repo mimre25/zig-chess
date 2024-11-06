@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub fn ask_user(buf: []u8) ![]u8 {
+pub fn askUser(buf: []u8) ![]u8 {
     const stdin = std.io.getStdIn().reader();
     const stdout = std.io.getStdOut().writer();
 

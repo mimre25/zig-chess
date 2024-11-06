@@ -1,13 +1,10 @@
 const std = @import("std");
 
-const Board = @import("board.zig").Board;
-const Player = @import("player.zig").Player;
-const Color = @import("player.zig").Color;
 pub const MGame = @import("game.zig");
 
 pub fn main() !void {
-    const testGame = @import("test_game.zig").game1;
-    try MGame.playGame(false, &testGame);
+    const test_game = @import("test_game.zig").game1;
+    try MGame.playGame(false, &test_game);
 
     try MGame.playGame(true, null);
 }
