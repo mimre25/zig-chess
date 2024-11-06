@@ -669,44 +669,8 @@ pub fn playGame(interactive: bool, game: ?[]const []const u8) !void {
     try bw.flush();
 }
 
-test "parse game1" {
-    const game = @import("test_game.zig").game1;
-    const stdout_file = std.io.getStdOut().writer();
-    var bw = std.io.bufferedWriter(stdout_file);
-    const stdout = bw.writer();
-    const allocator = std.testing.allocator;
-
-    var white = try Player.new(Color.white, allocator);
-    var black = try Player.new(Color.black, allocator);
-    var board = try Board.new(allocator, &white, &black);
-    defer board.destroy();
-    try white.initPieces();
-    try black.initPieces();
-    defer white.destroy();
-    defer black.destroy();
-    for (0..16) |idx| {
-        board.putPiece(&white.pieces[idx]);
-        board.putPiece(&black.pieces[idx]);
-    }
-    var i: u4 = 0;
-    var current_player: *Player = undefined;
-    for (game) |move_input| {
-        try board.print(stdout);
-        try bw.flush();
-
-        std.debug.print("Move: {s}\n", .{move_input});
-        var move = try parseMove(move_input);
-
-        if (@mod(i, 2) == 0) {
-            current_player = &white;
-        } else {
-            current_player = &black;
-        }
-        findSourcePosition(&move, current_player, &board);
-        std.debug.print("Move: {}\n", .{move});
-        try expect(isMoveLegal(move, &board, current_player));
-
-        try makeMove(&move, current_player, &board);
-        i += 1;
-    }
+test "play test game" {
+    //TODO: figure out why this test hangs with `zig build test` but not with `zig test`
+    const test_game = @import("test_game.zig").game1;
+    try playGame(false, &test_game);
 }
