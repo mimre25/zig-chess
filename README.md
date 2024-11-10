@@ -5,6 +5,8 @@ A small chess game in the CLI implemented in zig.
 > [!NOTE]
 > This project was implemented to try zig and has some rough edges, missing features ([google en passant](https://www.reddit.com/r/AnarchyChess/)), and probably bugs.
 
+This project uses `zig 0.13.0`.
+
 ## Build
 With zig installed, just run
 ```cli
