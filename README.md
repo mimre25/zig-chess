@@ -21,7 +21,7 @@ or with
 zig build test
 ```
 > [!NOTE]
-> One of the tests plays a test game that hangs when run via `zig build test` for some reason :man_shrugging:
+> One of the tests plays a test game ([Bertholee Rob - Judit Polgar (1990)](https://www.chess.com/games/view/470442)) that hangs when run via `zig build test` for some reason :man_shrugging:
 
 ## Running
 To play a game just run
